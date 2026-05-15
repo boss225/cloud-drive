@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  parentId  String?
+  parent    Folder?  @relation("FolderToFolder", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderToFolder")
+  files     File[]
+  color     String   @default("#FCD34D")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+}
+
+model File {
+  id              String    @id @default(cuid())
+  name            String
+  originalName    String
+  size            Int
+  mimeType        String
+  telegramFileId  String
+  telegramMsgId   Int
+  folderId        String?
+  folder          Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  starred         Boolean   @default(false)
+  trashedAt       DateTime?
+  downloads       Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  totalChunks     Int       @default(1)
+  chunks          FileChunk[]
+
+  @@index([folderId])
+  @@index([starred])
+  @@index([trashedAt])
+  @@index([name])
+}
+
+model FileChunk {
+  id              String @id @default(cuid())
+  fileId          String
+  file            File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  chunkIndex      Int
+  telegramFileId  String
+  telegramMsgId   Int
+  size            Int
+
+  @@unique([fileId, chunkIndex])
+  @@index([fileId])
+}

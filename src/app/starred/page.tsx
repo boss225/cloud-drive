@@ -6,20 +6,20 @@ import { useAppStore } from "@/store/useAppStore";
 import FileList from "@/components/FileList";
 import UploadZone from "@/components/UploadZone";
 
-export default function Home() {
+export default function StarredPage() {
   const { fetchFiles } = useFiles();
-  const { currentFolderId, sidebarView, sortBy, sortOrder, setCurrentFolder, setSidebarView } = useAppStore();
+  const { sidebarView, sortBy, sortOrder, setSidebarView, setCurrentFolder } = useAppStore();
 
   useEffect(() => {
-    setSidebarView("files");
-    setCurrentFolder(null, [{ id: null, name: "My Drive" }]);
+    setSidebarView("starred");
+    setCurrentFolder(null, [{ id: null, name: "⭐ Starred" }]);
   }, [setSidebarView, setCurrentFolder]);
 
   useEffect(() => {
-    if (currentFolderId === null && sidebarView === "files") {
+    if (sidebarView === "starred") {
       fetchFiles();
     }
-  }, [currentFolderId, sidebarView, sortBy, sortOrder, fetchFiles]);
+  }, [sidebarView, sortBy, sortOrder, fetchFiles]);
 
   return (
     <UploadZone>
