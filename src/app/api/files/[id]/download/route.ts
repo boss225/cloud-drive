@@ -38,7 +38,7 @@ export async function GET(
       data: { downloads: { increment: 1 } },
     });
 
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(new Uint8Array(fileBuffer), {
       headers: {
         "Content-Type": file.mimeType,
         "Content-Disposition": `attachment; filename="${encodeURIComponent(file.name)}"`,

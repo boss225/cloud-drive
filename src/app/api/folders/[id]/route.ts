@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { deleteMessage } from "@/lib/telegram";
+import { BreadcrumbItem } from "@/types";
 
 export async function GET(
   _request: NextRequest,
@@ -21,7 +22,7 @@ export async function GET(
   }
 
   // Build breadcrumb path
-  const breadcrumbs = [{ id: folder.id, name: folder.name }];
+  const breadcrumbs: BreadcrumbItem[] = [{ id: folder.id, name: folder.name }];
   let currentParentId = folder.parentId;
 
   while (currentParentId) {

@@ -37,7 +37,7 @@ export async function sendDocument(
   caption?: string
 ): Promise<TelegramMessage> {
   const formData = new FormData();
-  const blob = new Blob([fileBuffer], { type: mimeType });
+  const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimeType });
 
   formData.append("chat_id", CHANNEL_ID);
   formData.append("document", blob, fileName);
