@@ -2,7 +2,23 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+Create the required Supabase tables by running `supabase/schema.sql` in the
+Supabase SQL editor. The app uses Supabase Postgres directly through `pg`; it
+does not require Prisma.
+
+Set the server-side environment variables:
+
+```bash
+DATABASE_URL="postgresql://..."
+BOT_TOKEN="..."
+CHANNEL_ID="..."
+MAX_FILE_SIZE="20971520"
+```
+
+If your Supabase connection string does not include SSL settings, set
+`SUPABASE_DB_SSL=true`.
+
+Then run the development server:
 
 ```bash
 npm run dev

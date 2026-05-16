@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { listFiles, listFoldersWithCounts } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get("q") || "";
@@ -9,29 +9,8 @@ export async function GET(request: NextRequest) {
   }
 
   const [files, folders] = await Promise.all([
-    prisma.file.findMany({
-      where: {
-        name: {
-          contains: query,
-          mode: "insensitive",  // ← PostgreSQL case-insensitive
-        },
-        trashedAt: null,
-      },
-      take: 20,
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.folder.findMany({
-      where: {
-        name: {
-          contains: query,
-          mode: "insensitive",  // ← PostgreSQL case-insensitive
-        },
-      },
-      take: 10,
-      include: {
-        _count: { select: { files: true, children: true } },
-      },
-    }),
+    listFiles({ search: query, sortBy: "date", sortOrder: "desc", limit: 20 }),
+    listFoldersWithCounts({ type: "search", query }, "asc", 10),
   ]);
 
   return NextResponse.json({ files, folders });

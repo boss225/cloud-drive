@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getFileWithChunks, incrementFileDownloads } from "@/lib/db";
 import { downloadFile } from "@/lib/telegram";
 
 export async function GET(
@@ -9,10 +9,7 @@ export async function GET(
   try {
     const { id } = await params;
 
-    const file = await prisma.file.findUnique({
-      where: { id },
-      include: { chunks: { orderBy: { chunkIndex: "asc" } } },
-    });
+    const file = await getFileWithChunks(id);
 
     if (!file) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
@@ -33,10 +30,7 @@ export async function GET(
     }
 
     // Update download count
-    await prisma.file.update({
-      where: { id },
-      data: { downloads: { increment: 1 } },
-    });
+    await incrementFileDownloads(id);
 
     return new NextResponse(new Uint8Array(fileBuffer), {
       headers: {

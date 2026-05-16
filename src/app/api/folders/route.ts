@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { createFolder, getFolder } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,9 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (parentId) {
-      const parent = await prisma.folder.findUnique({
-        where: { id: parentId },
-      });
+      const parent = await getFolder(parentId);
       if (!parent) {
         return NextResponse.json(
           { error: "Parent folder not found" },
@@ -25,12 +23,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const folder = await prisma.folder.create({
-      data: {
-        name: name.trim(),
-        parentId: parentId || null,
-        color: color || "#FCD34D",
-      },
+    const folder = await createFolder({
+      name: name.trim(),
+      parentId: parentId || null,
+      color: color || "#FCD34D",
     });
 
     return NextResponse.json(folder);

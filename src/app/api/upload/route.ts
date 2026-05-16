@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { createFile, getFolder } from "@/lib/db";
 import { sendDocument } from "@/lib/telegram";
 
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || "20971520");
@@ -25,9 +25,7 @@ export async function POST(request: NextRequest) {
 
     // Verify folder exists if provided
     if (folderId) {
-      const folder = await prisma.folder.findUnique({
-        where: { id: folderId },
-      });
+      const folder = await getFolder(folderId);
       if (!folder) {
         return NextResponse.json(
           { error: "Folder not found" },
@@ -62,16 +60,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Save to database
-    const savedFile = await prisma.file.create({
-      data: {
-        name: file.name,
-        originalName: file.name,
-        size: file.size,
-        mimeType: file.type || "application/octet-stream",
-        telegramFileId: media.file_id,
-        telegramMsgId: telegramMsg.message_id,
-        folderId: folderId || null,
-      },
+    const savedFile = await createFile({
+      name: file.name,
+      originalName: file.name,
+      size: file.size,
+      mimeType: file.type || "application/octet-stream",
+      telegramFileId: media.file_id,
+      telegramMsgId: telegramMsg.message_id,
+      folderId: folderId || null,
     });
 
     return NextResponse.json({ success: true, file: savedFile });

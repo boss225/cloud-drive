@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import {
+  deleteFoldersByIds,
+  getDescendantFolderIds,
+  getFolder,
+  getFolderWithParentAndCounts,
+  listFilesWithChunksInFolders,
+  updateFolder,
+} from "@/lib/db";
 import { deleteMessage } from "@/lib/telegram";
 import { BreadcrumbItem } from "@/types";
 
@@ -9,13 +16,7 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  const folder = await prisma.folder.findUnique({
-    where: { id },
-    include: {
-      parent: true,
-      _count: { select: { files: true, children: true } },
-    },
-  });
+  const folder = await getFolderWithParentAndCounts(id);
 
   if (!folder) {
     return NextResponse.json({ error: "Folder not found" }, { status: 404 });
@@ -26,9 +27,7 @@ export async function GET(
   let currentParentId = folder.parentId;
 
   while (currentParentId) {
-    const parent = await prisma.folder.findUnique({
-      where: { id: currentParentId },
-    });
+    const parent = await getFolder(currentParentId);
     if (parent) {
       breadcrumbs.unshift({ id: parent.id, name: parent.name });
       currentParentId = parent.parentId;
@@ -49,17 +48,14 @@ export async function PATCH(
   const { id } = await params;
   const body = await request.json();
 
-  const folder = await prisma.folder.findUnique({ where: { id } });
+  const folder = await getFolder(id);
   if (!folder) {
     return NextResponse.json({ error: "Folder not found" }, { status: 404 });
   }
 
-  const updated = await prisma.folder.update({
-    where: { id },
-    data: {
-      ...(body.name && { name: body.name }),
-      ...(body.color && { color: body.color }),
-    },
+  const updated = await updateFolder(id, {
+    ...(body.name && { name: body.name }),
+    ...(body.color && { color: body.color }),
   });
 
   return NextResponse.json(updated);
@@ -70,29 +66,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  
-  // Get all descendant folders recursively
-  const getAllFolderIds = async (folderId: string): Promise<string[]> => {
-    const ids = [folderId];
-    const subfolders = await prisma.folder.findMany({
-      where: { parentId: folderId },
-      select: { id: true },
-    });
-    
-    for (const sub of subfolders) {
-      const subIds = await getAllFolderIds(sub.id);
-      ids.push(...subIds);
-    }
-    return ids;
-  };
 
-  const allFolderIds = await getAllFolderIds(id);
+  const allFolderIds = await getDescendantFolderIds(id);
+  if (allFolderIds.length === 0) {
+    return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+  }
 
   // Delete all files in these folders from Telegram
-  const files = await prisma.file.findMany({
-    where: { folderId: { in: allFolderIds } },
-    include: { chunks: true },
-  });
+  const files = await listFilesWithChunksInFolders(allFolderIds);
 
   for (const file of files) {
     try {
@@ -105,8 +86,7 @@ export async function DELETE(
     }
   }
 
-  // Cascade delete in DB (folder + subfolders + files)
-  await prisma.folder.delete({ where: { id } });
+  await deleteFoldersByIds(allFolderIds);
 
   return NextResponse.json({ success: true });
 }
