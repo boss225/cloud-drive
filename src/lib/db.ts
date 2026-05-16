@@ -129,7 +129,7 @@ async function ensureSchema() {
       .then(() => undefined)
       .catch((error) => {
         globalForDb.schemaReady = undefined;
-        throw error;
+        throw normalizeDbConnectionError(error);
       });
   }
 
@@ -145,7 +145,31 @@ async function query<T>(
     await ensureSchema();
   }
 
-  return (client ?? getDbPool()).query<T & QueryResultRow>(text, params);
+  try {
+    return await (client ?? getDbPool()).query<T & QueryResultRow>(text, params);
+  } catch (error) {
+    throw normalizeDbConnectionError(error);
+  }
+}
+
+function normalizeDbConnectionError(error: unknown) {
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === "ENOTFOUND" &&
+    "hostname" in error &&
+    typeof error.hostname === "string" &&
+    /^db\.[^.]+\.supabase\.co$/.test(error.hostname)
+  ) {
+    return new Error(
+      `Unable to resolve Supabase direct database host "${error.hostname}". ` +
+        "On Vercel, use the Supabase Supavisor/Connection Pooler URL for DATABASE_URL, " +
+        "or enable the Supabase IPv4 add-on for the direct database URL.",
+      { cause: error }
+    );
+  }
+
+  return error;
 }
 
 const fileSelect = `

@@ -15,6 +15,11 @@ CHANNEL_ID="..."
 MAX_FILE_SIZE="20971520"
 ```
 
+On Vercel, use Supabase's **Connection Pooler / Supavisor** connection string
+for `DATABASE_URL`, not the direct `db.<project-ref>.supabase.co` database URL.
+The direct URL is IPv6-only unless the Supabase IPv4 add-on is enabled, while
+Vercel serverless functions need an IPv4-compatible database route.
+
 If your Supabase connection string does not include SSL settings, set
 `SUPABASE_DB_SSL=true`.
 
