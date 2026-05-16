@@ -3,6 +3,7 @@ import { Pool, type PoolClient, type QueryResultRow } from "pg";
 
 export interface FileRecord {
   id: string;
+  userId: string;
   name: string;
   originalName: string;
   size: number;
@@ -29,6 +30,7 @@ export interface FileChunkRecord {
 
 export interface FolderRecord {
   id: string;
+  userId: string;
   name: string;
   parentId: string | null;
   color: string;
@@ -124,6 +126,12 @@ async function ensureSchema() {
           );
 
           CREATE INDEX IF NOT EXISTS "FileChunk_fileId_idx" ON "FileChunk"("fileId");
+          
+          ALTER TABLE "Folder" ADD COLUMN IF NOT EXISTS "userId" text;
+          ALTER TABLE "File" ADD COLUMN IF NOT EXISTS "userId" text;
+          
+          CREATE INDEX IF NOT EXISTS "Folder_userId_idx" ON "Folder"("userId");
+          CREATE INDEX IF NOT EXISTS "File_userId_idx" ON "File"("userId");
         `
       )
       .then(() => undefined)
@@ -174,6 +182,7 @@ function normalizeDbConnectionError(error: unknown) {
 
 const fileSelect = `
   id,
+  "userId",
   name,
   "originalName",
   size,
@@ -191,6 +200,7 @@ const fileSelect = `
 
 const folderSelect = `
   id,
+  "userId",
   name,
   "parentId",
   color,
@@ -210,6 +220,7 @@ const chunkSelect = `
 function folderSelectForAlias(alias: string) {
   return `
     ${alias}.id,
+    ${alias}."userId",
     ${alias}.name,
     ${alias}."parentId",
     ${alias}.color,
@@ -236,6 +247,7 @@ function mapFolderWithCount(
 ): FolderRecord {
   return {
     id: row.id,
+    userId: row.userId,
     name: row.name,
     parentId: row.parentId,
     color: row.color,
@@ -248,21 +260,22 @@ function mapFolderWithCount(
   };
 }
 
-export async function getFolder(id: string) {
+export async function getFolder(id: string, userId: string) {
   const { rows } = await query<FolderRecord>(
-    `SELECT ${folderSelect} FROM "Folder" WHERE id = $1`,
-    [id]
+    `SELECT ${folderSelect} FROM "Folder" WHERE id = $1 AND "userId" = $2`,
+    [id, userId]
   );
 
   return rows[0] ?? null;
 }
 
-export async function getFolderWithParentAndCounts(id: string) {
+export async function getFolderWithParentAndCounts(id: string, userId: string) {
   const { rows } = await query<
     FolderRecord & {
       filesCount: string | number;
       childrenCount: string | number;
       parentIdValue: string | null;
+      parentUserId: string | null;
       parentName: string | null;
       parentParentId: string | null;
       parentColor: string | null;
@@ -280,6 +293,7 @@ export async function getFolderWithParentAndCounts(id: string) {
           SELECT COUNT(*) FROM "Folder" child_count WHERE child_count."parentId" = f.id
         )::int AS "childrenCount",
         p.id AS "parentIdValue",
+        p."userId" AS "parentUserId",
         p.name AS "parentName",
         p."parentId" AS "parentParentId",
         p.color AS "parentColor",
@@ -287,9 +301,9 @@ export async function getFolderWithParentAndCounts(id: string) {
         p."updatedAt" AS "parentUpdatedAt"
       FROM "Folder" f
       LEFT JOIN "Folder" p ON p.id = f."parentId"
-      WHERE f.id = $1
+      WHERE f.id = $1 AND f."userId" = $2
     `,
-    [id]
+    [id, userId]
   );
 
   const row = rows[0];
@@ -304,6 +318,7 @@ export async function getFolderWithParentAndCounts(id: string) {
     parent: row.parentIdValue
       ? {
           id: row.parentIdValue,
+          userId: row.parentUserId ?? "",
           name: row.parentName ?? "",
           parentId: row.parentParentId,
           color: row.parentColor ?? "#FCD34D",
@@ -319,11 +334,12 @@ export async function listFoldersWithCounts(
     | { type: "parent"; parentId: string | null }
     | { type: "search"; query: string }
     | { type: "all" },
+  userId: string,
   sortOrder: SortOrder = "asc",
   limit?: number
 ) {
-  const values: unknown[] = [];
-  const conditions: string[] = [];
+  const values: unknown[] = [userId];
+  const conditions: string[] = [`f."userId" = $1`];
 
   if (where.type === "parent") {
     if (where.parentId === null) {
@@ -367,6 +383,7 @@ export async function listFoldersWithCounts(
 }
 
 export async function createFolder(data: {
+  userId: string;
   name: string;
   parentId: string | null;
   color: string;
@@ -374,12 +391,12 @@ export async function createFolder(data: {
   const { rows } = await query<FolderRecord>(
     `
       INSERT INTO "Folder" (
-        id, name, "parentId", color, "createdAt", "updatedAt"
+        id, "userId", name, "parentId", color, "createdAt", "updatedAt"
       )
-      VALUES ($1, $2, $3, $4, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
       RETURNING ${folderSelect}
     `,
-    [randomUUID(), data.name, data.parentId, data.color]
+    [randomUUID(), data.userId, data.name, data.parentId, data.color]
   );
 
   return rows[0];
@@ -387,28 +404,28 @@ export async function createFolder(data: {
 
 export async function updateFolder(
   id: string,
+  userId: string,
   data: { name?: string; color?: string }
 ) {
   const assignments: string[] = [`"updatedAt" = NOW()`];
-  const values: unknown[] = [];
+  const values: unknown[] = [id, userId];
 
+  let varIndex = 3;
   if (data.name !== undefined) {
     values.push(data.name);
-    assignments.push(`name = $${values.length}`);
+    assignments.push(`name = $${varIndex++}`);
   }
 
   if (data.color !== undefined) {
     values.push(data.color);
-    assignments.push(`color = $${values.length}`);
+    assignments.push(`color = $${varIndex++}`);
   }
-
-  values.push(id);
 
   const { rows } = await query<FolderRecord>(
     `
       UPDATE "Folder"
       SET ${assignments.join(", ")}
-      WHERE id = $${values.length}
+      WHERE id = $1 AND "userId" = $2
       RETURNING ${folderSelect}
     `,
     values
@@ -417,25 +434,26 @@ export async function updateFolder(
   return rows[0] ?? null;
 }
 
-export async function getDescendantFolderIds(id: string) {
+export async function getDescendantFolderIds(id: string, userId: string) {
   const { rows } = await query<{ id: string }>(
     `
       WITH RECURSIVE descendants AS (
-        SELECT id FROM "Folder" WHERE id = $1
+        SELECT id FROM "Folder" WHERE id = $1 AND "userId" = $2
         UNION ALL
         SELECT f.id
         FROM "Folder" f
         INNER JOIN descendants d ON f."parentId" = d.id
+        WHERE f."userId" = $2
       )
       SELECT id FROM descendants
     `,
-    [id]
+    [id, userId]
   );
 
   return rows.map((row) => row.id);
 }
 
-export async function deleteFoldersByIds(ids: string[]) {
+export async function deleteFoldersByIds(ids: string[], userId: string) {
   if (ids.length === 0) {
     return;
   }
@@ -449,14 +467,14 @@ export async function deleteFoldersByIds(ids: string[]) {
       `
         DELETE FROM "FileChunk"
         WHERE "fileId" IN (
-          SELECT id FROM "File" WHERE "folderId" = ANY($1::text[])
+          SELECT id FROM "File" WHERE "folderId" = ANY($1::text[]) AND "userId" = $2
         )
       `,
-      [ids],
+      [ids, userId],
       client
     );
-    await query(`DELETE FROM "File" WHERE "folderId" = ANY($1::text[])`, [ids], client);
-    await query(`DELETE FROM "Folder" WHERE id = ANY($1::text[])`, [ids], client);
+    await query(`DELETE FROM "File" WHERE "folderId" = ANY($1::text[]) AND "userId" = $2`, [ids, userId], client);
+    await query(`DELETE FROM "Folder" WHERE id = ANY($1::text[]) AND "userId" = $2`, [ids, userId], client);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -466,17 +484,17 @@ export async function deleteFoldersByIds(ids: string[]) {
   }
 }
 
-export async function getFile(id: string) {
+export async function getFile(id: string, userId: string) {
   const { rows } = await query<FileRecord>(
-    `SELECT ${fileSelect} FROM "File" WHERE id = $1`,
-    [id]
+    `SELECT ${fileSelect} FROM "File" WHERE id = $1 AND "userId" = $2`,
+    [id, userId]
   );
 
   return rows[0] ?? null;
 }
 
-export async function getFileWithChunks(id: string) {
-  const file = await getFile(id);
+export async function getFileWithChunks(id: string, userId: string) {
+  const file = await getFile(id, userId);
   if (!file) {
     return null;
   }
@@ -501,6 +519,7 @@ export async function getFileChunks(fileId: string) {
 }
 
 export async function listFiles(options: {
+  userId: string;
   folderId?: string | null;
   trashed?: boolean;
   starred?: boolean;
@@ -509,8 +528,8 @@ export async function listFiles(options: {
   search?: string;
   limit?: number;
 }) {
-  const values: unknown[] = [];
-  const conditions: string[] = [];
+  const values: unknown[] = [options.userId];
+  const conditions: string[] = [`"userId" = $1`];
 
   if (options.trashed) {
     conditions.push(`"trashedAt" IS NOT NULL`);
@@ -557,6 +576,7 @@ export async function listFiles(options: {
 }
 
 export async function createFile(data: {
+  userId: string;
   name: string;
   originalName: string;
   size: number;
@@ -569,6 +589,7 @@ export async function createFile(data: {
     `
       INSERT INTO "File" (
         id,
+        "userId",
         name,
         "originalName",
         size,
@@ -583,11 +604,12 @@ export async function createFile(data: {
         "createdAt",
         "updatedAt"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE, NULL, 0, 1, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, NULL, 0, 1, NOW(), NOW())
       RETURNING ${fileSelect}
     `,
     [
       randomUUID(),
+      data.userId,
       data.name,
       data.originalName,
       data.size,
@@ -603,6 +625,7 @@ export async function createFile(data: {
 
 export async function updateFile(
   id: string,
+  userId: string,
   data: {
     name?: string;
     starred?: boolean;
@@ -612,16 +635,17 @@ export async function updateFile(
   }
 ) {
   const assignments: string[] = [`"updatedAt" = NOW()`];
-  const values: unknown[] = [];
+  const values: unknown[] = [id, userId];
 
+  let varIndex = 3;
   if (data.name !== undefined) {
     values.push(data.name);
-    assignments.push(`name = $${values.length}`);
+    assignments.push(`name = $${varIndex++}`);
   }
 
   if (data.starred !== undefined) {
     values.push(data.starred);
-    assignments.push(`starred = $${values.length}`);
+    assignments.push(`starred = $${varIndex++}`);
   }
 
   if (data.restore) {
@@ -630,21 +654,19 @@ export async function updateFile(
 
   if (Object.prototype.hasOwnProperty.call(data, "folderId")) {
     values.push(data.folderId ?? null);
-    assignments.push(`"folderId" = $${values.length}`);
+    assignments.push(`"folderId" = $${varIndex++}`);
   }
 
   if (Object.prototype.hasOwnProperty.call(data, "trashedAt")) {
     values.push(data.trashedAt);
-    assignments.push(`"trashedAt" = $${values.length}`);
+    assignments.push(`"trashedAt" = $${varIndex++}`);
   }
-
-  values.push(id);
 
   const { rows } = await query<FileRecord>(
     `
       UPDATE "File"
       SET ${assignments.join(", ")}
-      WHERE id = $${values.length}
+      WHERE id = $1 AND "userId" = $2
       RETURNING ${fileSelect}
     `,
     values
@@ -664,14 +686,17 @@ export async function incrementFileDownloads(id: string) {
   );
 }
 
-export async function deleteFile(id: string) {
+export async function deleteFile(id: string, userId: string) {
   await ensureSchema();
   const client = await getDbPool().connect();
 
   try {
     await client.query("BEGIN");
-    await query(`DELETE FROM "FileChunk" WHERE "fileId" = $1`, [id], client);
-    await query(`DELETE FROM "File" WHERE id = $1`, [id], client);
+    // We must ensure the file belongs to the user before deleting its chunks
+    const { rowCount } = await query(`DELETE FROM "File" WHERE id = $1 AND "userId" = $2`, [id, userId], client);
+    if (rowCount && rowCount > 0) {
+      await query(`DELETE FROM "FileChunk" WHERE "fileId" = $1`, [id], client);
+    }
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -681,7 +706,7 @@ export async function deleteFile(id: string) {
   }
 }
 
-export async function listFilesWithChunksInFolders(folderIds: string[]) {
+export async function listFilesWithChunksInFolders(folderIds: string[], userId: string) {
   if (folderIds.length === 0) {
     return [];
   }
@@ -690,9 +715,9 @@ export async function listFilesWithChunksInFolders(folderIds: string[]) {
     `
       SELECT ${fileSelect}
       FROM "File"
-      WHERE "folderId" = ANY($1::text[])
+      WHERE "folderId" = ANY($1::text[]) AND "userId" = $2
     `,
-    [folderIds]
+    [folderIds, userId]
   );
 
   if (files.length === 0) {
@@ -723,7 +748,7 @@ export async function listFilesWithChunksInFolders(folderIds: string[]) {
   }));
 }
 
-export async function getStorageStats() {
+export async function getStorageStats(userId: string) {
   const { rows } = await query<{
     totalFiles: string | number;
     totalFolders: string | number;
@@ -733,15 +758,16 @@ export async function getStorageStats() {
   }>(
     `
       SELECT
-        (SELECT COUNT(*) FROM "File" WHERE "trashedAt" IS NULL)::int AS "totalFiles",
-        (SELECT COUNT(*) FROM "Folder")::int AS "totalFolders",
+        (SELECT COUNT(*) FROM "File" WHERE "trashedAt" IS NULL AND "userId" = $1)::int AS "totalFiles",
+        (SELECT COUNT(*) FROM "Folder" WHERE "userId" = $1)::int AS "totalFolders",
         (
           SELECT COUNT(*) FROM "File"
-          WHERE starred = TRUE AND "trashedAt" IS NULL
+          WHERE starred = TRUE AND "trashedAt" IS NULL AND "userId" = $1
         )::int AS "starredFiles",
-        (SELECT COUNT(*) FROM "File" WHERE "trashedAt" IS NOT NULL)::int AS "trashedFiles",
-        COALESCE((SELECT SUM(size) FROM "File"), 0)::bigint AS "totalSize"
-    `
+        (SELECT COUNT(*) FROM "File" WHERE "trashedAt" IS NOT NULL AND "userId" = $1)::int AS "trashedFiles",
+        COALESCE((SELECT SUM(size) FROM "File" WHERE "userId" = $1), 0)::bigint AS "totalSize"
+    `,
+    [userId]
   );
   const stats = rows[0];
 

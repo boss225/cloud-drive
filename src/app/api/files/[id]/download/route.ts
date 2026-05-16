@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFileWithChunks, incrementFileDownloads } from "@/lib/db";
 import { downloadFile } from "@/lib/telegram";
+import { createClient } from "@/utils/supabase/server";
 
 export async function GET(
   _request: NextRequest,
@@ -9,7 +10,11 @@ export async function GET(
   try {
     const { id } = await params;
 
-    const file = await getFileWithChunks(id);
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const file = await getFileWithChunks(id, user.id);
 
     if (!file) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });

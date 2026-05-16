@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createFile, getFolder } from "@/lib/db";
 import { sendDocument } from "@/lib/telegram";
+import { createClient } from "@/utils/supabase/server";
 
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || "20971520");
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const formData = await request.formData();
     const file = formData.get("file") as globalThis.File | null;
     const folderId = formData.get("folderId") as string | null;
@@ -25,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     // Verify folder exists if provided
     if (folderId) {
-      const folder = await getFolder(folderId);
+      const folder = await getFolder(folderId, user.id);
       if (!folder) {
         return NextResponse.json(
           { error: "Folder not found" },
@@ -61,6 +66,7 @@ export async function POST(request: NextRequest) {
 
     // Save to database
     const savedFile = await createFile({
+      userId: user.id,
       name: file.name,
       originalName: file.name,
       size: file.size,

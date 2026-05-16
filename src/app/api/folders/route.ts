@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createFolder, getFolder } from "@/lib/db";
+import { createClient } from "@/utils/supabase/server";
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const body = await request.json();
     const { name, parentId, color } = body;
 
@@ -14,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (parentId) {
-      const parent = await getFolder(parentId);
+      const parent = await getFolder(parentId, user.id);
       if (!parent) {
         return NextResponse.json(
           { error: "Parent folder not found" },
@@ -24,6 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     const folder = await createFolder({
+      userId: user.id,
       name: name.trim(),
       parentId: parentId || null,
       color: color || "#FCD34D",

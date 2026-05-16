@@ -9,6 +9,7 @@ import {
 } from "@/lib/db";
 import { deleteMessage } from "@/lib/telegram";
 import { BreadcrumbItem } from "@/types";
+import { createClient } from "@/utils/supabase/server";
 
 export async function GET(
   _request: NextRequest,
@@ -16,7 +17,11 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  const folder = await getFolderWithParentAndCounts(id);
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const folder = await getFolderWithParentAndCounts(id, user.id);
 
   if (!folder) {
     return NextResponse.json({ error: "Folder not found" }, { status: 404 });
@@ -27,7 +32,7 @@ export async function GET(
   let currentParentId = folder.parentId;
 
   while (currentParentId) {
-    const parent = await getFolder(currentParentId);
+    const parent = await getFolder(currentParentId, user.id);
     if (parent) {
       breadcrumbs.unshift({ id: parent.id, name: parent.name });
       currentParentId = parent.parentId;
@@ -48,12 +53,16 @@ export async function PATCH(
   const { id } = await params;
   const body = await request.json();
 
-  const folder = await getFolder(id);
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const folder = await getFolder(id, user.id);
   if (!folder) {
     return NextResponse.json({ error: "Folder not found" }, { status: 404 });
   }
 
-  const updated = await updateFolder(id, {
+  const updated = await updateFolder(id, user.id, {
     ...(body.name && { name: body.name }),
     ...(body.color && { color: body.color }),
   });
@@ -67,13 +76,17 @@ export async function DELETE(
 ) {
   const { id } = await params;
 
-  const allFolderIds = await getDescendantFolderIds(id);
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const allFolderIds = await getDescendantFolderIds(id, user.id);
   if (allFolderIds.length === 0) {
     return NextResponse.json({ error: "Folder not found" }, { status: 404 });
   }
 
   // Delete all files in these folders from Telegram
-  const files = await listFilesWithChunksInFolders(allFolderIds);
+  const files = await listFilesWithChunksInFolders(allFolderIds, user.id);
 
   for (const file of files) {
     try {
@@ -86,7 +99,7 @@ export async function DELETE(
     }
   }
 
-  await deleteFoldersByIds(allFolderIds);
+  await deleteFoldersByIds(allFolderIds, user.id);
 
   return NextResponse.json({ success: true });
 }

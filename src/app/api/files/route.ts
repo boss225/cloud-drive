@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listFiles, listFoldersWithCounts, type SortBy, type SortOrder } from "@/lib/db";
+import { createClient } from "@/utils/supabase/server";
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const params = request.nextUrl.searchParams;
     const folderId = params.get("folderId");
     const root = params.get("root");
@@ -13,14 +18,14 @@ export async function GET(request: NextRequest) {
 
     if (trashed === "true") {
       return NextResponse.json({
-        files: await listFiles({ trashed: true }),
+        files: await listFiles({ userId: user.id, trashed: true }),
         folders: [],
       });
     }
 
     if (starred === "true") {
       return NextResponse.json({
-        files: await listFiles({ starred: true, sortBy, sortOrder }),
+        files: await listFiles({ userId: user.id, starred: true, sortBy, sortOrder }),
         folders: [],
       });
     }
@@ -35,13 +40,14 @@ export async function GET(request: NextRequest) {
     const [files, folders] = await Promise.all([
       listFiles(
         targetFolderId === undefined
-          ? { sortBy, sortOrder }
-          : { folderId: targetFolderId, sortBy, sortOrder }
+          ? { userId: user.id, sortBy, sortOrder }
+          : { userId: user.id, folderId: targetFolderId, sortBy, sortOrder }
       ),
       listFoldersWithCounts(
         targetFolderId === undefined
           ? { type: "all" }
           : { type: "parent", parentId: targetFolderId },
+        user.id,
         sortOrder
       ),
     ]);
