@@ -1,0 +1,13 @@
+# Telegram Bot
+BOT_TOKEN=8573045486:AAHAUKut9FzgCl99JnqG83nwqtaL-KCWxRg
+CHANNEL_ID=-1003875188854
+
+# Supabase PostgreSQL
+DATABASE_URL="postgresql://postgres.esbzrzntgsaewhgpfsmm:Vinh@2205!!@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://postgres.esbzrzntgsaewhgpfsmm:Vinh@2205!!@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
+NEXT_PUBLIC_SUPABASE_URL="https://esbzrzntgsaewhgpfsmm.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVzYnpyem50Z3NhZXdoZ3Bmc21tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MDQzNjAsImV4cCI6MjA5NDI4MDM2MH0.ci_RDwi5NTUlvSOmeHII7bwELpGfCWQ0esaO-9yQtIk"
+
+# App
+MAX_FILE_SIZE=20971520
+NEXT_PUBLIC_APP_NAME="Top Cloud Drive"
