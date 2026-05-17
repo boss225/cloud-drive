@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useFiles } from "@/hooks/useFiles";
 import {
@@ -10,14 +10,16 @@ import {
   FiTrash2,
   FiEye,
   FiRotateCcw,
+  FiLoader,
 } from "react-icons/fi";
-import { FileItem, FolderItem } from "@/types";
+import { FileItem } from "@/types";
 import { isPreviewable } from "@/lib/utils";
 
 export default function ContextMenu() {
   const { contextMenu, setContextMenu, setShowRename, setPreviewFile, sidebarView } =
     useAppStore();
   const { deleteFile, deleteFolder, toggleStar, restoreFile } = useFiles();
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   useEffect(() => {
     const handler = () =>
@@ -31,6 +33,29 @@ export default function ContextMenu() {
   const isFile = contextMenu.type === "file";
   const item = contextMenu.item;
   const isTrashView = sidebarView === "trash";
+  const isActionPending = pendingAction !== null;
+
+  const closeMenu = () => {
+    setContextMenu({
+      visible: false,
+      x: 0,
+      y: 0,
+      type: null,
+      item: null,
+    });
+  };
+
+  const runMenuAction = async (actionId: string, action: () => Promise<void>) => {
+    if (pendingAction) return;
+
+    setPendingAction(actionId);
+    try {
+      await action();
+      closeMenu();
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   return (
     <div
@@ -44,30 +69,20 @@ export default function ContextMenu() {
             <MenuItem
               icon={<FiEye size={16} />}
               label="Preview"
+              disabled={isActionPending}
               onClick={() => {
                 setPreviewFile(item as FileItem);
-                setContextMenu({
-                  visible: false,
-                  x: 0,
-                  y: 0,
-                  type: null,
-                  item: null,
-                });
+                closeMenu();
               }}
             />
           )}
           <MenuItem
             icon={<FiDownload size={16} />}
             label="Download"
+            disabled={isActionPending}
             onClick={() => {
               window.open(`/api/files/${item.id}/download`, "_blank");
-              setContextMenu({
-                visible: false,
-                x: 0,
-                y: 0,
-                type: null,
-                item: null,
-              });
+              closeMenu();
             }}
           />
           <MenuItem
@@ -75,16 +90,13 @@ export default function ContextMenu() {
             label={
               (item as FileItem).starred ? "Remove star" : "Add star"
             }
-            onClick={() => {
-              toggleStar(item.id, (item as FileItem).starred);
-              setContextMenu({
-                visible: false,
-                x: 0,
-                y: 0,
-                type: null,
-                item: null,
-              });
-            }}
+            loading={pendingAction === "star"}
+            disabled={isActionPending}
+            onClick={() =>
+              runMenuAction("star", () =>
+                toggleStar(item.id, (item as FileItem).starred)
+              )
+            }
           />
         </>
       )}
@@ -93,18 +105,13 @@ export default function ContextMenu() {
         <MenuItem
           icon={<FiEdit2 size={16} />}
           label="Rename"
+          disabled={isActionPending}
           onClick={() => {
             setShowRename({
               type: isFile ? "file" : "folder",
               item,
             });
-            setContextMenu({
-              visible: false,
-              x: 0,
-              y: 0,
-              type: null,
-              item: null,
-            });
+            closeMenu();
           }}
         />
       )}
@@ -113,16 +120,9 @@ export default function ContextMenu() {
         <MenuItem
           icon={<FiRotateCcw size={16} />}
           label="Restore"
-          onClick={() => {
-            restoreFile(item.id);
-            setContextMenu({
-              visible: false,
-              x: 0,
-              y: 0,
-              type: null,
-              item: null,
-            });
-          }}
+          loading={pendingAction === "restore"}
+          disabled={isActionPending}
+          onClick={() => runMenuAction("restore", () => restoreFile(item.id))}
         />
       )}
 
@@ -132,20 +132,13 @@ export default function ContextMenu() {
         icon={<FiTrash2 size={16} />}
         label={isTrashView ? "Delete permanently" : "Delete"}
         danger
-        onClick={() => {
-          if (isFile) {
-            deleteFile(item.id, isTrashView);
-          } else {
-            deleteFolder(item.id);
-          }
-          setContextMenu({
-            visible: false,
-            x: 0,
-            y: 0,
-            type: null,
-            item: null,
-          });
-        }}
+        loading={pendingAction === "delete"}
+        disabled={isActionPending}
+        onClick={() =>
+          runMenuAction("delete", () =>
+            isFile ? deleteFile(item.id, isTrashView) : deleteFolder(item.id)
+          )
+        }
       />
     </div>
   );
@@ -156,22 +149,28 @@ function MenuItem({
   label,
   onClick,
   danger,
+  loading,
+  disabled,
 }: {
   icon: React.ReactNode;
   label: string;
-  onClick: () => void;
+  onClick: () => void | Promise<void>;
   danger?: boolean;
+  loading?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition ${
+      disabled={disabled}
+      aria-busy={loading}
+      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${
         danger
           ? "text-red-600 hover:bg-red-50"
           : "text-gray-700 hover:bg-gray-50"
       }`}
     >
-      {icon}
+      {loading ? <FiLoader size={16} className="animate-spin" /> : icon}
       {label}
     </button>
   );

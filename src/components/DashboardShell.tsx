@@ -11,9 +11,10 @@ import CreateFolderModal from "./CreateFolderModal";
 import RenameModal from "./RenameModal";
 import PreviewModal from "./PreviewModal";
 import ContextMenu from "./ContextMenu";
-import { FiMenu, FiLogOut, FiUser } from "react-icons/fi";
+import { FiMenu, FiLogOut, FiUser, FiLoader } from "react-icons/fi";
 import Toast from "./Toast";
 import type { User } from "@supabase/supabase-js";
+import { useActionLoading } from "@/hooks/useActionLoading";
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -40,10 +41,10 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleLogout = async () => {
+  const { loading: isLoggingOut, run: handleLogout } = useActionLoading(async () => {
     await fetch("/auth/logout", { method: "POST" });
     window.location.href = "/";
-  };
+  });
 
   return (
     <div className="h-screen flex bg-gray-50">
@@ -90,10 +91,16 @@ export default function DashboardShell({ children, user }: DashboardShellProps) 
                   </div>
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-red-600 hover:bg-red-50 font-medium transition mt-1"
+                    disabled={isLoggingOut}
+                    aria-busy={isLoggingOut}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-red-600 hover:bg-red-50 font-medium transition mt-1 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <FiLogOut size={18} />
-                    <span>Log out</span>
+                    {isLoggingOut ? (
+                      <FiLoader size={18} className="animate-spin" />
+                    ) : (
+                      <FiLogOut size={18} />
+                    )}
+                    <span>{isLoggingOut ? "Logging out..." : "Log out"}</span>
                   </button>
                 </div>
               )}

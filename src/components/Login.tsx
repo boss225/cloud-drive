@@ -2,10 +2,12 @@
 
 import { createClient } from "@/utils/supabase/client";
 import { FcGoogle } from "react-icons/fc";
+import { FiLoader } from "react-icons/fi";
 import Image from "next/image";
+import { useActionLoading } from "@/hooks/useActionLoading";
 
 export default function Login() {
-  const handleLogin = async () => {
+  const { loading: isLoggingIn, run: handleLogin } = useActionLoading(async () => {
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -13,7 +15,7 @@ export default function Login() {
         redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
-  };
+  });
 
   return (
     <div className="h-screen w-full flex items-center justify-center bg-gray-50">
@@ -37,10 +39,16 @@ export default function Login() {
         </div>
         <button
           onClick={handleLogin}
-          className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-xl px-4 py-3 text-gray-700 font-medium hover:bg-gray-50 transition-colors focus:ring-4 focus:ring-gray-100"
+          disabled={isLoggingIn}
+          aria-busy={isLoggingIn}
+          className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-xl px-4 py-3 text-gray-700 font-medium hover:bg-gray-50 transition-colors focus:ring-4 focus:ring-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <FcGoogle size={24} />
-          Continue with Google
+          {isLoggingIn ? (
+            <FiLoader size={24} className="animate-spin" />
+          ) : (
+            <FcGoogle size={24} />
+          )}
+          {isLoggingIn ? "Signing in..." : "Continue with Google"}
         </button>
       </div>
     </div>

@@ -2,9 +2,10 @@
 
 import { useAppStore } from "@/store/useAppStore";
 import { useFiles } from "@/hooks/useFiles";
+import { useActionLoading } from "@/hooks/useActionLoading";
 import { FileItem as FileItemType, FolderItem } from "@/types";
 import { formatFileSize, getFileIcon, isPreviewable } from "@/lib/utils";
-import { FiStar, FiFolder } from "react-icons/fi";
+import { FiStar, FiFolder, FiLoader } from "react-icons/fi";
 import { formatDistanceToNow } from "date-fns";
 
 interface FileCardProps {
@@ -14,6 +15,11 @@ interface FileCardProps {
 export function FileCard({ file }: FileCardProps) {
   const { setContextMenu, setPreviewFile, viewMode, selectedIds, toggleSelect } = useAppStore();
   const { toggleStar } = useFiles();
+  const { loading: isTogglingStar, run: toggleFileStar } = useActionLoading(
+    async () => {
+      await toggleStar(file.id, file.starred);
+    }
+  );
 
   const isSelected = selectedIds.has(file.id);
   const hasSelection = selectedIds.size > 0;
@@ -44,6 +50,11 @@ export function FileCard({ file }: FileCardProps) {
   const handleCheckboxClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     toggleSelect(file.id);
+  };
+
+  const handleStarClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleFileStar();
   };
 
   if (viewMode === "list") {
@@ -92,16 +103,19 @@ export function FileCard({ file }: FileCardProps) {
           {formatFileSize(file.size)}
         </div>
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleStar(file.id, file.starred);
-          }}
-          className="opacity-0 group-hover:opacity-100 transition"
+          onClick={handleStarClick}
+          disabled={isTogglingStar}
+          aria-busy={isTogglingStar}
+          className="opacity-0 group-hover:opacity-100 transition disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <FiStar
-            size={16}
-            className={file.starred ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}
-          />
+          {isTogglingStar ? (
+            <FiLoader size={16} className="animate-spin text-gray-400" />
+          ) : (
+            <FiStar
+              size={16}
+              className={file.starred ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}
+            />
+          )}
         </button>
       </div>
     );
@@ -134,18 +148,21 @@ export function FileCard({ file }: FileCardProps) {
 
       {/* Star */}
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          toggleStar(file.id, file.starred);
-        }}
-        className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition"
+        onClick={handleStarClick}
+        disabled={isTogglingStar}
+        aria-busy={isTogglingStar}
+        className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition disabled:cursor-not-allowed disabled:opacity-60"
       >
-        <FiStar
-          size={16}
-          className={
-            file.starred ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
-          }
-        />
+        {isTogglingStar ? (
+          <FiLoader size={16} className="animate-spin text-gray-400" />
+        ) : (
+          <FiStar
+            size={16}
+            className={
+              file.starred ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
+            }
+          />
+        )}
       </button>
 
       {/* Icon or Thumbnail */}
@@ -200,7 +217,7 @@ export function FolderCard({ folder }: FolderCardProps) {
       toggleSelect(folder.id);
       return;
     }
-    navigateToFolder(folder.id, folder.name);
+    navigateToFolder(folder.id);
   };
 
   const handleCheckboxClick = (e: React.MouseEvent) => {

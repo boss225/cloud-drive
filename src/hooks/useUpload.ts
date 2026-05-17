@@ -2,25 +2,21 @@
 
 import { useCallback } from "react";
 import { useAppStore } from "@/store/useAppStore";
+import { MAX_UPLOAD_QUEUE_SIZE } from "@/lib/constants";
 import { generateId } from "@/lib/utils";
 import { useFiles } from "./useFiles";
+import type { UploadingFile } from "@/types";
+
+type QueuedUpload = Pick<UploadingFile, "id" | "file">;
 
 export function useUpload() {
   const { currentFolderId, addUpload, updateUpload, removeUpload, addToast } =
     useAppStore();
   const { fetchFiles, fetchStats } = useFiles();
 
-  const uploadFile = useCallback(
-    async (file: File) => {
-      const uploadId = generateId();
-
-      addUpload({
-        id: uploadId,
-        file,
-        progress: 0,
-        status: "pending",
-      });
-
+  const uploadQueuedFile = useCallback(
+    async ({ id: uploadId, file }: QueuedUpload) => {
+      let progressInterval: ReturnType<typeof setInterval> | undefined;
       try {
         updateUpload(uploadId, { status: "uploading", progress: 10 });
 
@@ -31,7 +27,7 @@ export function useUpload() {
         }
 
         // Simulate progress
-        const progressInterval = setInterval(() => {
+        progressInterval = setInterval(() => {
           updateUpload(uploadId, {
             progress: Math.min(
               90,
@@ -46,8 +42,6 @@ export function useUpload() {
           body: formData,
         });
 
-        clearInterval(progressInterval);
-
         if (!res.ok) {
           const error = await res.json();
           throw new Error(error.error || "Upload failed");
@@ -57,8 +51,7 @@ export function useUpload() {
         addToast(`Uploaded: ${file.name}`, "success");
 
         setTimeout(() => removeUpload(uploadId), 3000);
-        fetchFiles();
-        fetchStats();
+        await Promise.all([fetchFiles(), fetchStats()]);
       } catch (error) {
         updateUpload(uploadId, {
           status: "error",
@@ -66,11 +59,12 @@ export function useUpload() {
         });
         addToast(`Failed: ${file.name}`, "error");
         setTimeout(() => removeUpload(uploadId), 5000);
+      } finally {
+        if (progressInterval) clearInterval(progressInterval);
       }
     },
     [
       currentFolderId,
-      addUpload,
       updateUpload,
       removeUpload,
       addToast,
@@ -79,14 +73,75 @@ export function useUpload() {
     ]
   );
 
+  const uploadFile = useCallback(
+    async (file: File) => {
+      if (useAppStore.getState().uploadQueue.length >= MAX_UPLOAD_QUEUE_SIZE) {
+        addToast(`Upload queue is limited to ${MAX_UPLOAD_QUEUE_SIZE} files`, "error");
+        return;
+      }
+
+      const uploadId = generateId();
+
+      addUpload({
+        id: uploadId,
+        file,
+        progress: 0,
+        status: "pending",
+      });
+
+      await uploadQueuedFile({ id: uploadId, file });
+    },
+    [addToast, addUpload, uploadQueuedFile]
+  );
+
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
-      const fileArray = Array.from(files);
-      for (const file of fileArray) {
-        await uploadFile(file);
+      const selectedFiles = Array.from(files);
+      const availableSlots =
+        MAX_UPLOAD_QUEUE_SIZE - useAppStore.getState().uploadQueue.length;
+
+      if (availableSlots <= 0) {
+        addToast(`Upload queue is limited to ${MAX_UPLOAD_QUEUE_SIZE} files`, "error");
+        return;
+      }
+
+      const fileArray = selectedFiles.slice(0, availableSlots);
+      const skippedCount = selectedFiles.length - fileArray.length;
+
+      if (skippedCount > 0) {
+        addToast(
+          `Added ${fileArray.length} file${
+            fileArray.length === 1 ? "" : "s"
+          }. ${skippedCount} file${skippedCount === 1 ? "" : "s"} skipped because the queue limit is ${MAX_UPLOAD_QUEUE_SIZE}.`,
+          "info"
+        );
+      }
+
+      const queuedUploads = fileArray.map((file) => ({
+        id: generateId(),
+        file,
+      }));
+
+      queuedUploads.forEach(({ id, file }) => {
+        addUpload({
+          id,
+          file,
+          progress: 0,
+          status: "pending",
+        });
+      });
+
+      for (const queuedUpload of queuedUploads) {
+        const isStillQueued = useAppStore
+          .getState()
+          .uploadQueue.some((upload) => upload.id === queuedUpload.id);
+
+        if (!isStillQueued) continue;
+
+        await uploadQueuedFile(queuedUpload);
       }
     },
-    [uploadFile]
+    [addToast, addUpload, uploadQueuedFile]
   );
 
   return { uploadFile, uploadFiles };

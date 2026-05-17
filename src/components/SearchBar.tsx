@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { FiSearch, FiX, FiFile, FiFolder } from "react-icons/fi";
+import { FiSearch, FiX, FiFolder } from "react-icons/fi";
 import { FileItem, FolderItem } from "@/types";
 import { useFiles } from "@/hooks/useFiles";
 import { formatFileSize, getFileIcon } from "@/lib/utils";
@@ -16,6 +16,8 @@ export default function SearchBar() {
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { navigateToFolder } = useFiles();
+  const visibleResults =
+    query.length >= 2 ? results : { files: [], folders: [] };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -29,7 +31,6 @@ export default function SearchBar() {
 
   useEffect(() => {
     if (query.length < 2) {
-      setResults({ files: [], folders: [] });
       return;
     }
 
@@ -61,7 +62,11 @@ export default function SearchBar() {
           type="text"
           placeholder="Search files and folders..."
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setQuery(value);
+            if (value.length < 2) setShowResults(false);
+          }}
           onFocus={() => query.length >= 2 && setShowResults(true)}
           className="w-full pl-10 pr-10 py-2.5 bg-gray-100 rounded-xl border-0 focus:bg-white focus:ring-2 focus:ring-blue-500 transition text-sm"
         />
@@ -78,18 +83,18 @@ export default function SearchBar() {
         )}
       </div>
 
-      {showResults && (results.files.length > 0 || results.folders.length > 0) && (
+      {showResults && (visibleResults.files.length > 0 || visibleResults.folders.length > 0) && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 max-h-96 overflow-y-auto z-50">
-          {results.folders.length > 0 && (
+          {visibleResults.folders.length > 0 && (
             <div className="p-2">
               <div className="text-xs text-gray-400 px-3 py-1 font-medium">
                 FOLDERS
               </div>
-              {results.folders.map((folder) => (
+              {visibleResults.folders.map((folder) => (
                 <button
                   key={folder.id}
                   onClick={() => {
-                    navigateToFolder(folder.id, folder.name);
+                    navigateToFolder(folder.id);
                     setShowResults(false);
                     setQuery("");
                   }}
@@ -102,12 +107,12 @@ export default function SearchBar() {
             </div>
           )}
 
-          {results.files.length > 0 && (
+          {visibleResults.files.length > 0 && (
             <div className="p-2 border-t border-gray-100">
               <div className="text-xs text-gray-400 px-3 py-1 font-medium">
                 FILES
               </div>
-              {results.files.map((file) => (
+              {visibleResults.files.map((file) => (
                 <button
                   key={file.id}
                   onClick={() => {

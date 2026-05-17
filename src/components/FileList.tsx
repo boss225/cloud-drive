@@ -2,8 +2,9 @@
 
 import { useAppStore } from "@/store/useAppStore";
 import { useFiles } from "@/hooks/useFiles";
+import { useActionLoading } from "@/hooks/useActionLoading";
 import { FileCard, FolderCard } from "./FileItem";
-import { FiGrid, FiList, FiInbox, FiTrash2, FiX, FiCheckSquare, FiRotateCcw } from "react-icons/fi";
+import { FiGrid, FiList, FiInbox, FiTrash2, FiX, FiCheckSquare, FiRotateCcw, FiLoader } from "react-icons/fi";
 
 export default function FileList() {
   const {
@@ -36,7 +37,7 @@ export default function FileList() {
 
   const isTrashView = sidebarView === "trash";
 
-  const handleBulkDelete = async () => {
+  const { loading: isBulkDeleting, run: handleBulkDelete } = useActionLoading(async () => {
     const items: Array<{ id: string; type: "file" | "folder" }> = [
       ...folders
         .filter((f) => selectedIds.has(f.id))
@@ -46,12 +47,14 @@ export default function FileList() {
         .map((f) => ({ id: f.id, type: "file" as const })),
     ];
     await bulkDelete(items, isTrashView);
-  };
+  });
 
-  const handleBulkRestore = async () => {
+  const { loading: isBulkRestoring, run: handleBulkRestore } = useActionLoading(async () => {
     const selectedFiles = files.filter((f) => selectedIds.has(f.id));
     await Promise.all(selectedFiles.map((f) => restoreFile(f.id)));
-  };
+  });
+
+  const isBulkActionLoading = isBulkDeleting || isBulkRestoring;
 
   return (
     <div className="flex-1 flex flex-col">
@@ -68,7 +71,8 @@ export default function FileList() {
             </span>
             <button
               onClick={() => (allSelected ? clearSelection() : selectAll(allIds))}
-              className="flex items-center gap-1.5 text-xs bg-white/20 hover:bg-white/30 rounded-lg px-2.5 py-1 transition"
+              disabled={isBulkActionLoading}
+              className="flex items-center gap-1.5 text-xs bg-white/20 hover:bg-white/30 rounded-lg px-2.5 py-1 transition disabled:cursor-not-allowed disabled:opacity-60"
             >
               <FiCheckSquare size={13} />
               {allSelected ? "Deselect all" : "Select all"}
@@ -78,22 +82,39 @@ export default function FileList() {
             {isTrashView && files.some((f) => selectedIds.has(f.id)) && (
               <button
                 onClick={handleBulkRestore}
-                className="flex items-center gap-1.5 text-sm bg-white/20 hover:bg-white/30 rounded-lg px-3 py-1.5 font-medium transition"
+                disabled={isBulkActionLoading}
+                aria-busy={isBulkRestoring}
+                className="flex items-center gap-1.5 text-sm bg-white/20 hover:bg-white/30 rounded-lg px-3 py-1.5 font-medium transition disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <FiRotateCcw size={14} />
-                Restore
+                {isBulkRestoring ? (
+                  <FiLoader size={14} className="animate-spin" />
+                ) : (
+                  <FiRotateCcw size={14} />
+                )}
+                {isBulkRestoring ? "Restoring..." : "Restore"}
               </button>
             )}
             <button
               onClick={handleBulkDelete}
-              className="flex items-center gap-1.5 text-sm bg-red-500 hover:bg-red-600 rounded-lg px-3 py-1.5 font-medium transition shadow-sm"
+              disabled={isBulkActionLoading}
+              aria-busy={isBulkDeleting}
+              className="flex items-center gap-1.5 text-sm bg-red-500 hover:bg-red-600 rounded-lg px-3 py-1.5 font-medium transition shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <FiTrash2 size={14} />
-              {isTrashView ? "Delete permanently" : "Delete"}
+              {isBulkDeleting ? (
+                <FiLoader size={14} className="animate-spin" />
+              ) : (
+                <FiTrash2 size={14} />
+              )}
+              {isBulkDeleting
+                ? "Deleting..."
+                : isTrashView
+                  ? "Delete permanently"
+                  : "Delete"}
             </button>
             <button
               onClick={clearSelection}
-              className="flex items-center gap-1 text-sm bg-white/20 hover:bg-white/30 rounded-lg px-2.5 py-1.5 transition"
+              disabled={isBulkActionLoading}
+              className="flex items-center gap-1 text-sm bg-white/20 hover:bg-white/30 rounded-lg px-2.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-60"
             >
               <FiX size={14} />
               Cancel

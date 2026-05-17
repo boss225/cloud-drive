@@ -2,12 +2,10 @@
 
 import { useCallback } from "react";
 import { useAppStore } from "@/store/useAppStore";
-import { BreadcrumbItem } from "@/types";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export function useFiles() {
   const router = useRouter();
-  const pathname = usePathname();
 
   const {
     currentFolderId,
@@ -93,7 +91,7 @@ export function useFiles() {
   );
 
   const navigateToFolder = useCallback(
-    async (folderId: string | null, folderName?: string) => {
+    async (folderId: string | null) => {
       if (folderId === null) {
         router.push("/");
       } else {
@@ -127,8 +125,7 @@ export function useFiles() {
             permanent ? "File deleted permanently" : "File moved to trash",
             "success"
           );
-          fetchFiles();
-          fetchStats();
+          await Promise.all([fetchFiles(), fetchStats()]);
         }
       } catch {
         addToast("Failed to delete file", "error");
@@ -143,8 +140,7 @@ export function useFiles() {
         const res = await fetch(`/api/folders/${id}`, { method: "DELETE" });
         if (res.ok) {
           addToast("Folder deleted", "success");
-          fetchFiles();
-          fetchStats();
+          await Promise.all([fetchFiles(), fetchStats()]);
         }
       } catch {
         addToast("Failed to delete folder", "error");
@@ -161,7 +157,7 @@ export function useFiles() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ starred: !starred }),
         });
-        fetchFiles();
+        await fetchFiles();
       } catch {
         addToast("Failed to update file", "error");
       }
@@ -178,8 +174,7 @@ export function useFiles() {
           body: JSON.stringify({ restore: true }),
         });
         addToast("File restored", "success");
-        fetchFiles();
-        fetchStats();
+        await Promise.all([fetchFiles(), fetchStats()]);
       } catch {
         addToast("Failed to restore file", "error");
       }
@@ -196,7 +191,7 @@ export function useFiles() {
           body: JSON.stringify({ name }),
         });
         addToast("File renamed", "success");
-        fetchFiles();
+        await fetchFiles();
       } catch {
         addToast("Failed to rename file", "error");
       }
@@ -213,7 +208,7 @@ export function useFiles() {
           body: JSON.stringify({ name }),
         });
         addToast("Folder renamed", "success");
-        fetchFiles();
+        await fetchFiles();
       } catch {
         addToast("Failed to rename folder", "error");
       }
@@ -235,8 +230,7 @@ export function useFiles() {
         });
         if (res.ok) {
           addToast("Folder created", "success");
-          fetchFiles();
-          fetchStats();
+          await Promise.all([fetchFiles(), fetchStats()]);
         }
       } catch {
         addToast("Failed to create folder", "error");
@@ -268,8 +262,7 @@ export function useFiles() {
           "success"
         );
         clearSelection();
-        fetchFiles();
-        fetchStats();
+        await Promise.all([fetchFiles(), fetchStats()]);
       } catch {
         addToast("Failed to delete some items", "error");
       }

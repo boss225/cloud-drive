@@ -29,6 +29,8 @@ export const FOLDER_COLORS = [
   "#2DD4BF",
 ];
 
+export const MAX_UPLOAD_QUEUE_SIZE = 20;
+
 export const PREVIEWABLE_TYPES = [
   "image/jpeg",
   "image/png",
